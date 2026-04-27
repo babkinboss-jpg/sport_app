@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Мой Тренер — Mini App</title>
+    <!-- Подключаем Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* Базовые стили, которые подстраиваются под тему Telegram */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 16px;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: -16px -16px 20px -16px;
+            padding: 40px 20px 30px 20px;
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+
+        .header h1 { font-size: 28px; margin-bottom: 8px; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value { font-size: 32px; font-weight: bold; color: #667eea; }
+        .stat-label { font-size: 14px; color: var(--tg-theme-hint-color, #666); margin-top: 8px; }
+        .section {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .workout-item {
+            background: var(--tg-theme-bg-color, #fff);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .workout-name { font-weight: 500; }
+        .workout-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 20px;
+        }
+        .status-done { background: #4caf50; color: white; }
+        .status-pending { background: #ff9800; color: white; }
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            width: 100%;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: opacity 0.2s;
+        }
+        .btn:active { opacity: 0.8; }
+        .btn-secondary {
+            background: var(--tg-theme-secondary-bg-color, #e0e0e0);
+            color: var(--tg-theme-text-color, #000);
+        }
+        .progress-bar {
+            background: var(--tg-theme-hint-color, #ccc);
+            border-radius: 10px;
+            height: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.3s;
+        }
+        .footer-note {
+            text-align: center;
+            padding: 16px;
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #666);
+        }
+        @media (prefers-color-scheme: dark) {
+            .workout-item { background: #2a2a2a; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏋️ Мой Тренер</h1>
+        <p>Ваш персональный спортивный помощник</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card"><div class="stat-value" id="workoutCount">0</div><div class="stat-label">Тренировок</div></div>
+        <div class="stat-card"><div class="stat-value" id="streakDays">0</div><div class="stat-label">Дней подряд</div></div>
+        <div class="stat-card"><div class="stat-value" id="avgPerWeek">0</div><div class="stat-label">В среднем в неделю</div></div>
+        <div class="stat-card"><div class="stat-value" id="totalMinutes">0</div><div class="stat-label">Минут тренировок</div></div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">📊 Прогресс недели</div>
+        <div class="progress-bar"><div class="progress-fill" id="weeklyProgress" style="width: 0%"></div></div>
+        <div style="text-align: right; font-size: 12px;" id="progressText">0 из 3 тренировок</div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🏋️ Сегодня</div>
+        <div id="todayWorkout"><div class="workout-item"><span class="workout-name">Загрузка...</span></div></div>
+        <button class="btn" id="markDoneBtn" onclick="markWorkoutDone()">✅ Выполнил</button>
+        <button class="btn btn-secondary" id="markSkipBtn" onclick="markWorkoutSkip()">⏰ Перенести</button>
+    </div>
+
+    <div class="section">
+        <div class="section-title">📝 Отметить активность</div>
+        <button class="btn" onclick="addCustomWorkout('cardio')">🏃 Кардио</button>
+        <button class="btn btn-secondary" onclick="addCustomWorkout('strength')">💪 Силовая</button>
+        <button class="btn btn-secondary" onclick="addCustomWorkout('stretch')">🧘 Растяжка</button>
+    </div>
+
+    <div class="section">
+        <div class="section-title">🥗 Питание и вода</div>
+        <div style="display: flex; gap: 10px;">
+            <input type="number" id="waterAmount" placeholder="Мл воды" value="250" style="flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ddd; background: var(--tg-theme-bg-color); color: var(--tg-theme-text-color);">
+            <button class="btn" style="width: auto; margin: 0;" onclick="addWater()">💧 Добавить</button>
+        </div>
+        <button class="btn btn-secondary" style="margin-top: 10px;" onclick="logMeal()">🍽 Записать приём пищи</button>
+    </div>
+
+    <div class="section">
+        <div class="section-title">💪 Совет тренера</div>
+        <div id="trainerAdvice" style="font-size: 14px; line-height: 1.5;">Напиши в чат с ботом, что тебя беспокоит, или нажми «Получить совет».</div>
+        <button class="btn" style="margin-top: 10px;" onclick="getAdvice()">🗣 Получить совет</button>
+    </div>
+
+    <div class="footer-note" id="lastSync"></div>
+
+    <script>
+        // Инициализация Telegram Web App
+        let tg = window.Telegram.WebApp;
+        tg.expand(); // Разворачиваем на весь экран
+        tg.MainButton.hide();
+        tg.BackButton.hide();
+
+        // Данные пользователя — будут храниться в облаке Telegram
+        let userData = {
+            workouts: [],
+            nutrition: [],
+            totalWorkouts: 0,
+            lastWorkoutDate: null,
+            streak: 0,
+            totalMinutes: 0
+        };
+
+        // ===== ЗАГРУЗКА / СОХРАНЕНИЕ ДАННЫХ =====
+        async function loadData() {
+            try {
+                let data = await tg.CloudStorage.getItem('sportData');
+                if (data) {
+                    userData = JSON.parse(data);
+                } else {
+                    // Данных нет — инициализируем
+                    userData.workouts = userData.workouts || [];
+                    userData.nutrition = userData.nutrition || [];
+                    userData.totalWorkouts = userData.totalWorkouts || 0;
+                    userData.totalMinutes = userData.totalMinutes || 0;
+                    userData.streak = userData.streak || 0;
+                }
+                updateUI();
+            } catch(e) { console.log('Ошибка загрузки', e); updateUI(); }
+        }
+
+        async function saveData() {
+            await tg.CloudStorage.setItem('sportData', JSON.stringify(userData));
+            updateUI();
+        }
+
+        // ===== РАСЧЁТ ПОКАЗАТЕЛЕЙ И ОБНОВЛЕНИЕ ЭКРАНА =====
+        function getWeeksSinceStart() {
+            let startDate = localStorage.getItem('startDate');
+            if (!startDate) { localStorage.setItem('startDate', new Date().toISOString()); return 1; }
+            let weeks = Math.floor((new Date() - new Date(startDate)) / (7 * 24 * 3600 * 1000));
+            return Math.max(1, weeks + 1);
+        }
+
+        function getWeeklyWorkouts() {
+            let weekStart = new Date();
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+            weekStart.setHours(0,0,0,0);
+            return userData.workouts.filter(w => new Date(w.date) >= weekStart).length;
+        }
+
+        function updateStreak() {
+            let last = userData.lastWorkoutDate ? new Date(userData.lastWorkoutDate) : null;
+            let today = new Date();
+            let yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+            if (!last || last.toDateString() === yesterday.toDateString()) userData.streak++;
+            else if (last.toDateString() !== today.toDateString()) userData.streak = 1;
+        }
+
+        function getTodayWorkout() {
+            let day = new Date().getDay();
+            let workouts = [
+                {name: "🏃 Бег 20 мин + приседания 3x10", type: "cardio"},
+                {name: "💪 Силовая: отжимания 4x10", type: "strength"},
+                {name: "🧘 Растяжка и йога 20 мин", type: "stretch"},
+                {name: "🔥 HIIT 15 мин + планк", type: "hiit"},
+                {name: "🏃 Интервальный бег 25 мин", type: "cardio"},
+                {name: "💪 Круговая тренировка", type: "strength"},
+                {name: "🚫 День отдыха", type: "rest"}
+            ];
+            return workouts[day] || workouts[0];
+        }
+
+        function updateUI() {
+            document.getElementById('workoutCount').innerText = userData.totalWorkouts;
+            document.getElementById('streakDays').innerText = userData.streak;
+            document.getElementById('totalMinutes').innerText = userData.totalMinutes;
+            let avg = (userData.totalWorkouts / getWeeksSinceStart()).toFixed(1);
+            document.getElementById('avgPerWeek').innerText = avg;
+            let weeklyDone = getWeeklyWorkouts();
+            let target = 3;
+            let percent = Math.min(100, (weeklyDone / target) * 100);
+            document.getElementById('weeklyProgress').style.width = percent + '%';
+            document.getElementById('progressText').innerText = `${weeklyDone} из ${target} тренировок`;
+            let todayPlan = getTodayWorkout();
+            let workoutHtml = `<div class="workout-item"><span class="workout-name">${todayPlan.name}</span>`;
+            if(todayPlan.type === 'rest') workoutHtml += '<span class="workout-status status-done">Отдых</span>';
+            else workoutHtml += '<span class="workout-status status-pending">Осталось</span>';
+            workoutHtml += '</div>';
+            document.getElementById('todayWorkout').innerHTML = workoutHtml;
+            let btn1 = document.getElementById('markDoneBtn');
+            let btn2 = document.getElementById('markSkipBtn');
+            if (todayPlan.type === 'rest') { btn1.style.display = 'none'; btn2.style.display = 'none'; }
+            else { btn1.style.display = 'block'; btn2.style.display = 'block'; }
+            document.getElementById('lastSync').innerText = 'Обновлено: ' + new Date().toLocaleTimeString();
+        }
+
+        // ===== ДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЯ =====
+        async function markWorkoutDone() {
+            let workout = getTodayWorkout();
+            if (workout.type === 'rest') { tg.showAlert('Сегодня день отдыха!'); return; }
+            userData.workouts.push({ date: new Date().toISOString(), name: workout.name, type: workout.type, completed: true });
+            userData.totalWorkouts++;
+            userData.totalMinutes += 20;
+            userData.lastWorkoutDate = new Date().toISOString();
+            updateStreak();
+            await saveData();
+            tg.showAlert('🔥 Отлично! Тренировка засчитана!');
+
+            // Отправляем данные в бот (чтобы бот знал о результате)
+            tg.sendData(JSON.stringify({ action: 'workout_done', workout: workout.name }));
+        }
+
+        async function markWorkoutSkip() { tg.showAlert('⏰ Перенесено на завтра. Можно сделать 10 минут вечером!'); }
+
+        async function addCustomWorkout(type) {
+            let minutes = prompt('Сколько минут длилась тренировка?', '30');
+            if(minutes){
+                let typeNames = { cardio: 'Кардио', strength: 'Силовая', stretch: 'Растяжка' };
+                userData.workouts.push({ date: new Date().toISOString(), name: `${typeNames[type]} ${minutes} мин`, type: type, duration: parseInt(minutes), completed: true });
+                userData.totalWorkouts++;
+                userData.totalMinutes += parseInt(minutes);
+                userData.lastWorkoutDate = new Date().toISOString();
+                updateStreak();
+                await saveData();
+                tg.showAlert('✅ Активность сохранена!');
+            }
+        }
+
+        async function addWater() {
+            let amount = document.getElementById('waterAmount').value;
+            if(amount){
+                userData.nutrition.push({ date: new Date().toISOString(), type: 'water', amount: parseInt(amount) });
+                await saveData();
+                tg.showAlert(`💧 ${amount} мл воды добавлено!`);
+            }
+        }
+
+        async function logMeal() {
+            let meal = prompt('Что вы съели?', '');
+            if(meal){
+                userData.nutrition.push({ date: new Date().toISOString(), type: 'meal', text: meal });
+                await saveData();
+                tg.showAlert('🍽 Приём пищи записан!');
+            }
+        }
+
+        function getAdvice() {
+            let question = prompt('О чём хочешь спросить тренера?', '');
+            if (question) {
+                tg.sendData(JSON.stringify({ action: 'get_advice', question: question }));
+                tg.showAlert('Запрос отправлен. Ответ придёт в чат.');
+            }
+        }
+
+        // Запуск
+        loadData();
+    </script>
+</body>
+</html>
